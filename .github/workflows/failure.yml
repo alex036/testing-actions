@@ -40,8 +40,8 @@ jobs:
         if: env.SIMULATION_TYPE == 'dependency-error'
         run: |
           echo "::warning::Simulating a dependency error scenario"
-          echo "Attempting to install invalid package..."
-          pip install completely-fake-package-name-123456 || echo "Package installation failed as expected"
+          echo "Simulating attempt to install invalid package..."
+          echo "Package installation failed as expected"
           exit 1
           
       - name: Timeout error simulation

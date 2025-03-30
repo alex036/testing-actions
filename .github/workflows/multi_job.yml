@@ -69,13 +69,10 @@ jobs:
           node-version: '16'
           cache: 'npm'
           
-      - name: Cache dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.npm
-          key: ${{ needs.setup.outputs.cache-key }}
-          restore-keys: |
-            deps-
+      - name: Simulate cache dependencies
+        run: |
+          echo "Simulating dependency caching..."
+          echo "Cache key: ${{ needs.setup.outputs.cache-key }}"
             
       - name: Simulate linting
         run: |
@@ -101,14 +98,10 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
           
-      - name: Cache dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.npm
-          key: ${{ needs.setup.outputs.cache-key }}-${{ matrix.os }}-${{ matrix.node-version }}
-          restore-keys: |
-            ${{ needs.setup.outputs.cache-key }}-${{ matrix.os }}-
-            ${{ needs.setup.outputs.cache-key }}-
+      - name: Simulate cache dependencies
+        run: |
+          echo "Simulating dependency caching..."
+          echo "Cache key: ${{ needs.setup.outputs.cache-key }}-${{ matrix.os }}-${{ matrix.node-version }}"
             
       - name: Build project
         run: |
