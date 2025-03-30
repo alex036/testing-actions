@@ -1,0 +1,88 @@
+name: Long-Running Process Simulation
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Total duration in minutes'
+        required: true
+        default: '5'
+        type: number
+      steps:
+        description: 'Number of progress steps'
+        required: true
+        default: '10'
+        type: number
+      artifact-size:
+        description: 'Size of test artifact to generate (MB)'
+        required: true
+        default: '10'
+        type: number
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      step-duration: ${{ steps.calculate.outputs.step-duration }}
+    steps:
+      - name: Calculate step duration
+        id: calculate
+        run: |
+          TOTAL_SECONDS=$((${{ github.event.inputs.duration }} * 60))
+          STEP_SECONDS=$(($TOTAL_SECONDS / ${{ github.event.inputs.steps }}))
+          echo "step-duration=$STEP_SECONDS" >> $GITHUB_OUTPUT
+          echo "Total duration: ${{ github.event.inputs.duration }} minutes"
+          echo "Number of steps: ${{ github.event.inputs.steps }}"
+          echo "Each step will take approximately $STEP_SECONDS seconds"
+
+  generate-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate test artifact
+        run: |
+          echo "Generating a ${{ github.event.inputs.artifact-size }}MB test file..."
+          dd if=/dev/urandom of=test-artifact.bin bs=1M count=${{ github.event.inputs.artifact-size }}
+          ls -lh test-artifact.bin
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-artifact
+          path: test-artifact.bin
+          retention-days: 1
+
+  long-process:
+    needs: [prepare, generate-artifact]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: test-artifact
+
+      - name: Verify artifact
+        run: ls -lh test-artifact.bin
+
+      - name: Start long-running process
+        run: |
+          echo "Starting a long-running process with ${{ github.event.inputs.steps }} steps"
+          echo "Total estimated duration: ${{ github.event.inputs.duration }} minutes"
+          
+      - name: Run with progress updates
+        run: |
+          STEP_DURATION="${{ needs.prepare.outputs.step-duration }}"
+          TOTAL_STEPS="${{ github.event.inputs.steps }}"
+          
+          for ((i=1; i<=TOTAL_STEPS; i++)); do
+            PROGRESS=$((i * 100 / TOTAL_STEPS))
+            echo "::notice::Processing step $i of $TOTAL_STEPS ($PROGRESS% complete)"
+            echo "Performing computation on test artifact..."
+            md5sum test-artifact.bin > /dev/null
+            sleep $STEP_DURATION
+          done
+
+      - name: Process completion
+        run: |
+          echo "::notice::Long-running process completed successfully!"
+          echo "Total duration: ${{ github.event.inputs.duration }} minutes"
+          echo "Processed artifact size: ${{ github.event.inputs.artifact-size }}MB"
+          date

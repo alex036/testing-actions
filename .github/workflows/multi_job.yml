@@ -1,0 +1,199 @@
+name: Advanced CI/CD Pipeline Simulation
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      run-tests:
+        description: 'Run test suite'
+        type: boolean
+        default: true
+      deploy-env:
+        description: 'Deployment environment'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+        default: 'development'
+      debug-mode:
+        description: 'Enable debug mode'
+        type: boolean
+        default: false
+
+env:
+  GLOBAL_VAR: 'shared-across-jobs'
+  DEBUG_MODE: ${{ github.event.inputs.debug-mode == 'true' }}
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      cache-key: ${{ steps.cache-key.outputs.value }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up build matrix
+        id: set-matrix
+        run: |
+          echo "matrix={\"node-version\":[\"14\",\"16\",\"18\"],\"os\":[\"ubuntu-latest\",\"windows-latest\"]}" >> $GITHUB_OUTPUT
+          
+      - name: Generate cache key
+        id: cache-key
+        run: |
+          echo "value=deps-${{ hashFiles('**/package.json') || github.sha }}" >> $GITHUB_OUTPUT
+          
+      - name: Debug info
+        if: env.DEBUG_MODE == 'true'
+        run: |
+          echo "::notice::Debug mode enabled"
+          echo "Repository: ${{ github.repository }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "SHA: ${{ github.sha }}"
+          echo "Event: ${{ github.event_name }}"
+          
+  lint:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+          cache: 'npm'
+          
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ needs.setup.outputs.cache-key }}
+          restore-keys: |
+            deps-
+            
+      - name: Simulate linting
+        run: |
+          echo "Running linters..."
+          if [[ "${{ env.DEBUG_MODE }}" == "true" ]]; then
+            echo "::notice::Running in verbose mode"
+          fi
+          echo "Linting completed successfully"
+          
+  build:
+    needs: [setup, lint]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ needs.setup.outputs.cache-key }}-${{ matrix.os }}-${{ matrix.node-version }}
+          restore-keys: |
+            ${{ needs.setup.outputs.cache-key }}-${{ matrix.os }}-
+            ${{ needs.setup.outputs.cache-key }}-
+            
+      - name: Build project
+        run: |
+          echo "Building project with Node.js ${{ matrix.node-version }} on ${{ matrix.os }}"
+          echo "GLOBAL_VAR=${{ env.GLOBAL_VAR }}"
+          echo "Build completed successfully"
+          
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-${{ matrix.os }}-${{ matrix.node-version }}
+          path: |
+            README.md
+            .github
+          retention-days: 1
+          
+  test:
+    if: github.event.inputs.run-tests != 'false'
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+          
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: build-ubuntu-latest-16
+          
+      - name: Run tests
+        run: |
+          echo "Running test suite..."
+          # Simulate a test failure 20% of the time
+          if [[ $(( $RANDOM % 5 )) -eq 0 ]]; then
+            echo "::error::Test failure detected!"
+            exit 1
+          fi
+          echo "All tests passed!"
+          
+  deploy:
+    needs: [build, test]
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.deploy-env || 'development' }}
+    concurrency: 
+      group: deploy-${{ github.event.inputs.deploy-env || 'development' }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        
+      - name: Deploy to ${{ github.event.inputs.deploy-env || 'development' }}
+        run: |
+          echo "::notice::Deploying to ${{ github.event.inputs.deploy-env || 'development' }} environment"
+          echo "Deployment started at $(date)"
+          sleep 5
+          echo "Deployment completed successfully!"
+          
+  notify:
+    needs: [lint, build, test, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Workflow status
+        run: |
+          echo "::notice::Workflow Summary"
+          echo "Lint: ${{ needs.lint.result }}"
+          echo "Build: ${{ needs.build.result }}"
+          echo "Test: ${{ needs.test.result }}"
+          echo "Deploy: ${{ needs.deploy.result }}"
+          
+          if [[ "${{ needs.lint.result }}" == "success" && \
+                "${{ needs.build.result }}" == "success" && \
+                ("${{ needs.test.result }}" == "success" || "${{ needs.test.result }}" == "skipped") && \
+                "${{ needs.deploy.result }}" == "success" ]]; then
+            echo "::notice::🎉 Pipeline completed successfully!"
+          else
+            echo "::error::❌ Pipeline completed with issues"
+            # Don't fail the workflow here to ensure notification always completes
+          fi

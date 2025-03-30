@@ -1,0 +1,62 @@
+name: Error Simulation Workflow
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      error-type:
+        description: 'Type of error to simulate'
+        required: true
+        default: 'command-failure'
+        type: choice
+        options:
+          - command-failure
+          - dependency-error
+          - timeout-error
+
+jobs:
+  simulate-errors:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Setup environment
+        run: |
+          echo "Setting up test environment..."
+          echo "SIMULATION_TYPE=${{ github.event.inputs.error-type || 'command-failure' }}" >> $GITHUB_ENV
+          
+      - name: Command failure simulation
+        if: env.SIMULATION_TYPE == 'command-failure'
+        run: |
+          echo "::warning::Simulating a command failure scenario"
+          echo "Attempting to run non-existent command..."
+          non_existent_command || echo "Command failed as expected"
+          exit 1
+          
+      - name: Dependency error simulation
+        if: env.SIMULATION_TYPE == 'dependency-error'
+        run: |
+          echo "::warning::Simulating a dependency error scenario"
+          echo "Attempting to install invalid package..."
+          pip install completely-fake-package-name-123456 || echo "Package installation failed as expected"
+          exit 1
+          
+      - name: Timeout error simulation
+        if: env.SIMULATION_TYPE == 'timeout-error'
+        timeout-minutes: 1
+        run: |
+          echo "::warning::Simulating a timeout error scenario"
+          echo "Starting a process that will run too long..."
+          echo "This will timeout after 1 minute"
+          sleep 70
+          echo "This line should never be reached"
+          
+      - name: Error report
+        if: failure()
+        run: |
+          echo "::error::Error simulation completed successfully"
+          echo "Workflow failed as expected with error type: ${{ env.SIMULATION_TYPE }}"
+          echo "This step runs even after previous steps failed"
