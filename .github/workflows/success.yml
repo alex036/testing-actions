@@ -57,15 +57,7 @@ jobs:
         run: |
           echo "Building package..."
           echo "Package built successfully!"
-      
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: build-artifact
-          path: |
-            README.md
-            .github
-          retention-days: 1
+    
   
   analyze:
     needs: build-and-test
