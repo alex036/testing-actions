@@ -63,11 +63,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16'
-          cache: 'npm'
+      # Node.js setup removed to avoid dependency errors
           
       - name: Simulate cache dependencies
         run: |
@@ -80,7 +76,19 @@ jobs:
           if [[ "${{ env.DEBUG_MODE }}" == "true" ]]; then
             echo "::notice::Running in verbose mode"
           fi
-          echo "Linting completed successfully"
+          
+          # Random pause between 2-7 seconds
+          SLEEP_TIME=$(( $RANDOM % 6 + 2 ))
+          echo "Linting taking $SLEEP_TIME seconds..."
+          sleep $SLEEP_TIME
+          
+          # 20% chance of linting warnings
+          if [[ $(( $RANDOM % 5 )) -eq 0 ]]; then
+            echo "::warning::Found $(( $RANDOM % 10 + 1 )) style issues"
+            echo "Linting completed with warnings"
+          else
+            echo "Linting completed successfully"
+          fi
           
   build:
     needs: [setup, lint]
@@ -92,11 +100,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         
-      - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v3
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+      # Node.js setup removed to avoid dependency errors
+      - name: Simulate Node.js ${{ matrix.node-version }} environment
+        run: echo "Simulating Node.js ${{ matrix.node-version }} environment on ${{ matrix.os }}"
           
       - name: Simulate cache dependencies
         run: |
@@ -107,6 +113,19 @@ jobs:
         run: |
           echo "Building project with Node.js ${{ matrix.node-version }} on ${{ matrix.os }}"
           echo "GLOBAL_VAR=${{ env.GLOBAL_VAR }}"
+          
+          # Random pause between 5-15 seconds to simulate build time
+          SLEEP_TIME=$(( $RANDOM % 11 + 5 ))
+          echo "Building for $SLEEP_TIME seconds..."
+          sleep $SLEEP_TIME
+          
+          # 15% chance of build failure, but only on specific combinations
+          if [[ "${{ matrix.node-version }}" == "14" && "${{ matrix.os }}" == "windows-latest" && $(( $RANDOM % 100 )) -lt 15 ]]; then
+            echo "::error::Build failed on Windows with Node 14"
+            echo "Simulated compatibility issue with older Node version on Windows"
+            exit 1
+          fi
+          
           echo "Build completed successfully"
           
       - name: Upload build artifacts
@@ -126,10 +145,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16'
+      # Node.js setup removed to avoid dependency errors
+      - name: Simulate Node.js environment
+        run: echo "Simulating Node.js environment for testing"
           
       - name: Download artifacts
         uses: actions/download-artifact@v3
@@ -139,12 +157,27 @@ jobs:
       - name: Run tests
         run: |
           echo "Running test suite..."
-          # Simulate a test failure 20% of the time
-          if [[ $(( $RANDOM % 5 )) -eq 0 ]]; then
-            echo "::error::Test failure detected!"
+          
+          # Variable test duration between 3-12 seconds
+          SLEEP_TIME=$(( $RANDOM % 10 + 3 ))
+          echo "Tests running for $SLEEP_TIME seconds..."
+          sleep $SLEEP_TIME
+          
+          # Simulate different types of test outcomes
+          RANDOM_NUM=$(( $RANDOM % 10 ))
+          if [[ $RANDOM_NUM -eq 0 ]]; then
+            # 10% chance of complete failure
+            echo "::error::Multiple test failures detected!"
+            echo "Simulating critical test failures"
             exit 1
+          elif [[ $RANDOM_NUM -eq 1 || $RANDOM_NUM -eq 2 ]]; then
+            # 20% chance of partial failure with warnings
+            echo "::warning::Some tests are flaky ($(( $RANDOM % 5 + 1 )) failures)"
+            echo "Continuing despite minor test issues"
+          else
+            # 70% chance of success
+            echo "All tests passed!"
           fi
-          echo "All tests passed!"
           
   deploy:
     needs: [build, test]
@@ -165,8 +198,38 @@ jobs:
         run: |
           echo "::notice::Deploying to ${{ github.event.inputs.deploy-env || 'development' }} environment"
           echo "Deployment started at $(date)"
-          sleep 5
-          echo "Deployment completed successfully!"
+          
+          # Variable deployment time based on environment
+          if [[ "${{ github.event.inputs.deploy-env }}" == "production" ]]; then
+            # Production deployments take longer
+            SLEEP_TIME=$(( $RANDOM % 10 + 10 ))
+          elif [[ "${{ github.event.inputs.deploy-env }}" == "staging" ]]; then
+            # Staging is medium
+            SLEEP_TIME=$(( $RANDOM % 8 + 5 ))
+          else
+            # Dev is fastest
+            SLEEP_TIME=$(( $RANDOM % 5 + 3 ))
+          fi
+          
+          echo "Deploying (estimated time: $SLEEP_TIME seconds)..."
+          
+          # Show progress updates during longer deployments
+          if [[ $SLEEP_TIME -gt 8 ]]; then
+            HALF_TIME=$(( SLEEP_TIME / 2 ))
+            sleep $HALF_TIME
+            echo "::notice::Deployment 50% complete..."
+            sleep $(( SLEEP_TIME - HALF_TIME ))
+          else
+            sleep $SLEEP_TIME
+          fi
+          
+          # 5% chance of deployment issues in production
+          if [[ "${{ github.event.inputs.deploy-env }}" == "production" && $(( $RANDOM % 20 )) -eq 0 ]]; then
+            echo "::warning::Deployment completed with warnings"
+            echo "Some services may need manual verification"
+          else
+            echo "Deployment completed successfully!"
+          fi
           
   notify:
     needs: [lint, build, test, deploy]

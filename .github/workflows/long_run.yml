@@ -28,11 +28,18 @@ jobs:
         id: calculate
         run: |
           TOTAL_SECONDS=$((${{ github.event.inputs.duration }} * 60))
-          STEP_SECONDS=$(($TOTAL_SECONDS / ${{ github.event.inputs.steps }}))
+          
+          # Add some randomness to the calculation
+          RANDOM_FACTOR=$(( $RANDOM % 20 - 10 )) # -10% to +10%
+          ADJUSTED_TOTAL=$((TOTAL_SECONDS * (100 + RANDOM_FACTOR) / 100))
+          
+          STEP_SECONDS=$(($ADJUSTED_TOTAL / ${{ github.event.inputs.steps }}))
           echo "step-duration=$STEP_SECONDS" >> $GITHUB_OUTPUT
-          echo "Total duration: ${{ github.event.inputs.duration }} minutes"
+          
+          echo "Total duration: ${{ github.event.inputs.duration }} minutes (adjusted by ${RANDOM_FACTOR}%)"
+          echo "Adjusted duration: $(($ADJUSTED_TOTAL / 60)) minutes $(($ADJUSTED_TOTAL % 60)) seconds"
           echo "Number of steps: ${{ github.event.inputs.steps }}"
-          echo "Each step will take approximately $STEP_SECONDS seconds"
+          echo "Each step will take approximately $STEP_SECONDS seconds (with random variations)"
 
   generate-artifact:
     runs-on: ubuntu-latest
@@ -40,7 +47,26 @@ jobs:
       - name: Generate test artifact
         run: |
           echo "Generating a ${{ github.event.inputs.artifact-size }}MB test file..."
+          
+          # Add a random pause to simulate variable generation time
+          GENERATION_TIME=$(( $RANDOM % (${{ github.event.inputs.artifact-size }} / 2 + 1) + 1 ))
+          echo "Estimated generation time: $GENERATION_TIME seconds"
+          
+          # Show progress during generation
+          for ((i=1; i<=GENERATION_TIME; i++)); do
+            PROGRESS=$((i * 100 / GENERATION_TIME))
+            if [[ $((i % 2)) -eq 0 ]]; then
+              echo "Generating file: $PROGRESS% complete"
+            fi
+            sleep 1
+          done
+          
+          # Actually generate the file
           dd if=/dev/urandom of=test-artifact.bin bs=1M count=${{ github.event.inputs.artifact-size }}
+          
+          # Random chance of slightly different file size
+          ACTUAL_SIZE=$(( ${{ github.event.inputs.artifact-size }} + ($RANDOM % 3 - 1) ))
+          echo "Actual file size may vary slightly from requested size"
           ls -lh test-artifact.bin
       
       - name: Upload artifact
@@ -72,17 +98,93 @@ jobs:
           STEP_DURATION="${{ needs.prepare.outputs.step-duration }}"
           TOTAL_STEPS="${{ github.event.inputs.steps }}"
           
+          # Track overall process status
+          PROCESS_STATUS="normal"
+          
           for ((i=1; i<=TOTAL_STEPS; i++)); do
             PROGRESS=$((i * 100 / TOTAL_STEPS))
+            
+            # Add random variations to step duration (±30%)
+            VARIATION=$(( ($RANDOM % 60) - 30 ))
+            ADJUSTED_DURATION=$(( STEP_DURATION * (100 + VARIATION) / 100 ))
+            if [[ $ADJUSTED_DURATION -lt 1 ]]; then
+              ADJUSTED_DURATION=1
+            fi
+            
+            # Randomly simulate different processing behaviors
+            BEHAVIOR_TYPE=$(( $RANDOM % 10 ))
+            
+            if [[ $BEHAVIOR_TYPE -eq 0 && $PROCESS_STATUS == "normal" ]]; then
+              # 10% chance of slowdown
+              PROCESS_STATUS="slow"
+              echo "::warning::Processing slowing down at step $i (resource contention simulated)"
+              ADJUSTED_DURATION=$(( ADJUSTED_DURATION * 2 ))
+            elif [[ $BEHAVIOR_TYPE -eq 1 && $PROCESS_STATUS == "slow" ]]; then
+              # Recovery from slowdown
+              PROCESS_STATUS="normal"
+              echo "::notice::Processing speed returning to normal at step $i"
+            elif [[ $BEHAVIOR_TYPE -eq 2 ]]; then
+              # 10% chance of temporary acceleration
+              echo "::notice::Processing step $i faster than expected (cached data)"
+              ADJUSTED_DURATION=$(( ADJUSTED_DURATION / 2 ))
+            elif [[ $BEHAVIOR_TYPE -eq 3 && $i -gt $(( TOTAL_STEPS / 2 )) ]]; then
+              # 10% chance of warning in second half
+              echo "::warning::Minor issue detected at step $i, continuing process"
+            fi
+            
             echo "::notice::Processing step $i of $TOTAL_STEPS ($PROGRESS% complete)"
-            echo "Performing computation on test artifact..."
-            md5sum test-artifact.bin > /dev/null
-            sleep $STEP_DURATION
+            echo "Performing computation on test artifact (estimated time: ${ADJUSTED_DURATION}s)..."
+            
+            # Simulate different computation types
+            COMPUTATION_TYPE=$(( $RANDOM % 3 ))
+            if [[ $COMPUTATION_TYPE -eq 0 ]]; then
+              md5sum test-artifact.bin > /dev/null
+              echo "Performed hash verification"
+            elif [[ $COMPUTATION_TYPE -eq 1 ]]; then
+              echo "Performed data transformation"
+              sleep 1
+            else
+              echo "Performed statistical analysis"
+              sleep 1
+            fi
+            
+            # 5% chance of retry needed
+            if [[ $(( $RANDOM % 20 )) -eq 0 ]]; then
+              echo "::warning::Step $i requires retry, reprocessing..."
+              sleep $(( ADJUSTED_DURATION / 3 ))
+              echo "Retry successful, continuing"
+            fi
+            
+            sleep $(( ADJUSTED_DURATION - 1 ))
           done
 
       - name: Process completion
         run: |
-          echo "::notice::Long-running process completed successfully!"
+          # Random chance of different completion statuses
+          COMPLETION_TYPE=$(( $RANDOM % 10 ))
+          
+          if [[ $COMPLETION_TYPE -lt 8 ]]; then
+            # 80% chance of perfect completion
+            echo "::notice::Long-running process completed successfully!"
+            echo "Status: Optimal completion"
+          elif [[ $COMPLETION_TYPE -eq 8 ]]; then
+            # 10% chance of completion with warnings
+            echo "::notice::Long-running process completed with minor issues"
+            echo "::warning::Process completed with $(( $RANDOM % 3 + 1 )) non-critical warnings"
+            echo "Status: Acceptable completion"
+          else
+            # 10% chance of completion with performance note
+            echo "::notice::Long-running process completed successfully, but took longer than expected"
+            echo "::warning::Process performance was $(( $RANDOM % 20 + 10 ))% below target"
+            echo "Status: Sub-optimal completion"
+          fi
+          
+          # Calculate and display random metrics
+          PROCESSED_ITEMS=$(( $RANDOM % 1000 + 500 ))
+          PROCESSING_RATE=$(( $PROCESSED_ITEMS / ${{ github.event.inputs.duration }} ))
+          
           echo "Total duration: ${{ github.event.inputs.duration }} minutes"
           echo "Processed artifact size: ${{ github.event.inputs.artifact-size }}MB"
-          date
+          echo "Items processed: $PROCESSED_ITEMS"
+          echo "Processing rate: $PROCESSING_RATE items/minute"
+          echo "Completion time: $(date)"

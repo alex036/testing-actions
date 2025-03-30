@@ -32,15 +32,49 @@ jobs:
         if: env.SIMULATION_TYPE == 'command-failure'
         run: |
           echo "::warning::Simulating a command failure scenario"
-          echo "Attempting to run non-existent command..."
-          non_existent_command || echo "Command failed as expected"
+          # Random pause to simulate command execution attempt
+          SLEEP_TIME=$(( $RANDOM % 3 + 1 ))
+          echo "Attempting to run command in $SLEEP_TIME seconds..."
+          sleep $SLEEP_TIME
+          
+          # Randomly select different error types
+          ERROR_TYPE=$(( $RANDOM % 3 ))
+          if [[ $ERROR_TYPE -eq 0 ]]; then
+            echo "::error::Command not found: random_command_$(( $RANDOM % 100 ))"
+          elif [[ $ERROR_TYPE -eq 1 ]]; then
+            echo "::error::Permission denied: /usr/bin/restricted_binary"
+          else
+            echo "::error::Segmentation fault (core dumped)"
+          fi
+          
+          echo "Command failed as expected"
           exit 1
           
       - name: Dependency error simulation
         if: env.SIMULATION_TYPE == 'dependency-error'
         run: |
           echo "::warning::Simulating a dependency error scenario"
-          echo "Simulating attempt to install invalid package..."
+          
+          # Random pause to simulate installation attempt
+          SLEEP_TIME=$(( $RANDOM % 5 + 2 ))
+          echo "Attempting to install package in $SLEEP_TIME seconds..."
+          sleep $SLEEP_TIME
+          
+          # Randomly select different dependency error messages
+          ERROR_TYPE=$(( $RANDOM % 4 ))
+          PACKAGE_NAME="fake-package-$(( $RANDOM % 1000 ))"
+          
+          if [[ $ERROR_TYPE -eq 0 ]]; then
+            echo "::error::ERROR: Could not find a version that satisfies the requirement $PACKAGE_NAME"
+            echo "::error::ERROR: No matching distribution found for $PACKAGE_NAME"
+          elif [[ $ERROR_TYPE -eq 1 ]]; then
+            echo "::error::ERROR: Connection error: Could not connect to PyPI. Please check your internet connection."
+          elif [[ $ERROR_TYPE -eq 2 ]]; then
+            echo "::error::ERROR: Hash mismatch for package $PACKAGE_NAME; Expected: abc123, Got: def456"
+          else
+            echo "::error::ERROR: Command 'python setup.py egg_info' failed with error code 1"
+          fi
+          
           echo "Package installation failed as expected"
           exit 1
           
@@ -50,13 +84,41 @@ jobs:
         run: |
           echo "::warning::Simulating a timeout error scenario"
           echo "Starting a process that will run too long..."
-          echo "This will timeout after 1 minute"
-          sleep 70
+          
+          # Show progress updates to make it more realistic
+          echo "Starting long-running process..."
+          sleep 10
+          echo "10 seconds elapsed - still processing..."
+          sleep 10
+          echo "20 seconds elapsed - 33% complete..."
+          sleep 10
+          echo "30 seconds elapsed - 50% complete..."
+          sleep 10
+          echo "40 seconds elapsed - 67% complete..."
+          sleep 10
+          echo "50 seconds elapsed - 83% complete..."
+          echo "::warning::Process is taking longer than expected"
+          sleep 10
+          echo "60 seconds elapsed - 100% complete..."
+          
+          # This sleep will cause the timeout
+          echo "Finalizing process (this will timeout)..."
+          sleep 20
           echo "This line should never be reached"
           
       - name: Error report
         if: failure()
         run: |
+          # Random pause before generating report
+          SLEEP_TIME=$(( $RANDOM % 3 + 1 ))
+          sleep $SLEEP_TIME
+          
           echo "::error::Error simulation completed successfully"
           echo "Workflow failed as expected with error type: ${{ env.SIMULATION_TYPE }}"
+          echo "Error occurred at: $(date)"
+          
+          # Generate a random error code
+          ERROR_CODE="E$(( $RANDOM % 900 + 100 ))"
+          echo "Error code: $ERROR_CODE"
+          
           echo "This step runs even after previous steps failed"
